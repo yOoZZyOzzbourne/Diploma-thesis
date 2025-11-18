@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Dashboard - FastAPI + HTMX</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+
+        hr {
+            margin: 20px 0;
+            border: none;
+            border-top: 2px solid #ddd;
+        }
+
+        .main-layout {
+            display: flex;
+            gap: 20px;
+        }
+
+        .left-column {
+            flex: 2;
+        }
+
+        .right-column {
+            flex: 1;
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-bottom: 15px;
+        }
+
+        .light-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .light-switch {
+            flex: 1;
+            padding: 15px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .light-switch h3 {
+            margin-bottom: 10px;
+        }
+
+        .switch-btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+
+        .status-on {
+            background-color: #28a745;
+            color: white;
+            font-weight: bold;
+        }
+
+        .status-off {
+            background-color: #dc3545;
+            color: white;
+            font-weight: bold;
+        }
+
+        .sensors {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .metric-card {
+            flex: 1;
+            padding: 15px;
+            background: #e8f4f8;
+            border: 1px solid #bee3f8;
+            border-radius: 10px;
+        }
+
+        .metric-card h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1e88e5;
+        }
+
+        .camera-section {
+            margin-bottom: 20px;
+        }
+
+        .camera-toggle {
+            margin: 10px 0;
+        }
+
+        .camera-toggle label {
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .camera-image {
+            width: 100%;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+
+        .camera-status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        .camera-active {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .camera-disabled {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .system-status {
+            margin-top: 20px;
+        }
+
+        .device-list {
+            margin-top: 10px;
+        }
+
+        .device-item {
+            padding: 5px 0;
+        }
+
+        .refresh-btn {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        .refresh-btn:hover {
+            background-color: #0056b3;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .badge-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏠 IoT Home Dashboard</h1>
+        <hr>
+
+        <div class="main-layout">
+            <div class="left-column">
+                <h2>💡 Light Controls</h2>
+                <div class="light-controls">
+                    <div id="living-room-switch">
+                        {% include "light_switch.html" with context %}
+                        {% set name = "Living Room" %}
+                        {% set id = "living_room" %}
+                        {% set is_on = state.living_room_light %}
+                    </div>
+                    <div id="bedroom-switch">
+                        <div class="light-switch">
+                            <h3>Bedroom</h3>
+                            <button class="switch-btn"
+                                    hx-post="/toggle/bedroom"
+                                    hx-target="#bedroom-switch"
+                                    hx-swap="innerHTML">
+                                Toggle
+                            </button>
+                            <div class="status-{{ 'on' if state.bedroom_light else 'off' }}">
+                                {{ 'ON' if state.bedroom_light else 'OFF' }}
+                            </div>
+                        </div>
+                    </div>
+                    <div id="kitchen-switch">
+                        <div class="light-switch">
+                            <h3>Kitchen</h3>
+                            <button class="switch-btn"
+                                    hx-post="/toggle/kitchen"
+                                    hx-target="#kitchen-switch"
+                                    hx-swap="innerHTML">
+                                Toggle
+                            </button>
+                            <div class="status-{{ 'on' if state.kitchen_light else 'off' }}">
+                                {{ 'ON' if state.kitchen_light else 'OFF' }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr>
+
+                <h2>📊 Sensor Data</h2>
+                <div id="sensors" hx-get="/sensors" hx-trigger="load, every 5s">
+                    <div class="sensors">
+                        <div class="metric-card">
+                            <h3>🌡️ Temperature</h3>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>💧 Humidity</h3>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>🚶 Motion</h3>
+                            <div class="metric-value">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-column">
+                <div class="camera-section">
+                    <h2>📹 Camera Feed</h2>
+                    <div class="camera-toggle">
+                        <button class="switch-btn"
+                                hx-post="/toggle/camera"
+                                hx-target="#camera-status"
+                                hx-swap="innerHTML">
+                            Toggle Camera
+                        </button>
+                    </div>
+                    <div id="camera-status">
+                        {% if state.camera_enabled %}
+                        <div class="camera-status camera-active">📷 Camera Active</div>
+                        <div style="background: #1f77b4; color: white; padding: 100px 20px; text-align: center; border-radius: 10px; font-size: 24px; font-weight: bold;">
+                            📷 Mock Camera Feed
+                        </div>
+                        {% else %}
+                        <div class="camera-status camera-disabled">📷 Camera Disabled</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <hr>
+
+                <div class="system-status">
+                    <h2>⚙️ System Status</h2>
+                    <div class="status-badge badge-success">✅ All systems operational</div>
+
+                    <h3 style="margin-top: 20px;">Connected Devices</h3>
+                    <div id="device-status" hx-get="/devices" hx-trigger="load, every 5s">
+                        <div class="device-list">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<div class="light-switch">
+    <h3>{{ name }}</h3>
+    <button class="switch-btn"
+            hx-post="/toggle/{{ id }}"
+            hx-target="#{{ id }}-switch"
+            hx-swap="innerHTML">
+        Toggle
+    </button>
+    <div class="status-{{ 'on' if is_on else 'off' }}">
+        {{ 'ON' if is_on else 'OFF' }}
+    </div>
+</div>

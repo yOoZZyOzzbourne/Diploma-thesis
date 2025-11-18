@@ -1,0 +1,10 @@
+<div class="device-list">
+    {% for name, status in devices %}
+    <div class="device-item">
+        {{ '🟢' if status else '🔴' }} {{ name }}
+    </div>
+    {% endfor %}
+    <div style="margin-top: 10px; font-size: 14px; color: #666;">
+        🕐 Last update: {{ last_update }}
+    </div>
+</div>
