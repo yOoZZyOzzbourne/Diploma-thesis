@@ -1,239 +1,434 @@
 import dash
-from dash import dcc, html, Input, Output, State
+from dash import dcc, html, Input, Output, State, dash_table
 import plotly.graph_objects as go
+import plotly.express as px
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Initialize the Dash app
-app = dash.Dash(__name__, title="IoT Dashboard - Dash")
-app.config.suppress_callback_exceptions = True
+app = dash.Dash(__name__, title="Analytics Dashboard - Dash", suppress_callback_exceptions=True)
 
-# Generate mock temperature history
-def generate_temp_history():
-    times = pd.date_range(end=datetime.now(), periods=50, freq='1min')
-    temps = 20 + np.cumsum(np.random.randn(50) * 0.5)
+# Generate sales data
+def generate_sales_data(days=90):
+    np.random.seed(42)
+    dates = pd.date_range(end=datetime.now(), periods=days, freq='D')
+    regions = ['North America', 'Europe', 'Asia', 'South America']
+    products = ['Product A', 'Product B', 'Product C', 'Product D', 'Product E']
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=times,
-        y=temps,
-        mode='lines',
-        name='Temperature',
-        line=dict(color='#ff7f0e', width=2)
-    ))
+    data = []
+    for date in dates:
+        for region in regions:
+            for product in products:
+                revenue = np.random.uniform(1000, 5000) * (1 + 0.1 * np.sin(date.dayofyear / 365 * 2 * np.pi))
+                units = int(np.random.uniform(10, 100))
+                data.append({
+                    'Date': date,
+                    'Region': region,
+                    'Product': product,
+                    'Revenue': revenue,
+                    'Units': units,
+                    'Status': np.random.choice(['Completed', 'Pending', 'Shipped'], p=[0.7, 0.2, 0.1])
+                })
+
+    return pd.DataFrame(data)
+
+# Chart generators
+def create_revenue_trend(df):
+    revenue_by_date = df.groupby('Date')['Revenue'].sum().reset_index()
+    fig = px.line(revenue_by_date, x='Date', y='Revenue', title='Revenue Trend')
+    fig.update_traces(line_color='#1f77b4', line_width=3)
     fig.update_layout(
-        title='Temperature History',
-        xaxis_title='Time',
-        yaxis_title='Temperature (°C)',
-        height=300,
-        margin=dict(l=50, r=50, t=50, b=50),
-        paper_bgcolor='#f8f9fa',
-        plot_bgcolor='white'
+        height=350,
+        margin=dict(l=40, r=40, t=40, b=40),
+        plot_bgcolor='white',
+        paper_bgcolor='#f8f9fa'
     )
     return fig
 
+def create_product_chart(df):
+    product_revenue = df.groupby('Product')['Revenue'].sum().reset_index()
+    fig = px.bar(product_revenue, x='Product', y='Revenue', title='Revenue by Product')
+    fig.update_traces(marker_color='#2ca02c')
+    fig.update_layout(
+        height=350,
+        margin=dict(l=40, r=40, t=40, b=40),
+        plot_bgcolor='white',
+        paper_bgcolor='#f8f9fa'
+    )
+    return fig
+
+def create_region_pie(df):
+    region_revenue = df.groupby('Region')['Revenue'].sum().reset_index()
+    fig = px.pie(region_revenue, values='Revenue', names='Region', title='Revenue by Region')
+    fig.update_layout(
+        height=350,
+        margin=dict(l=40, r=40, t=40, b=40),
+        paper_bgcolor='#f8f9fa'
+    )
+    return fig
+
+def create_heatmap(df):
+    df_copy = df.copy()
+    df_copy['Weekday'] = pd.to_datetime(df_copy['Date']).dt.day_name()
+    df_copy['Week'] = pd.to_datetime(df_copy['Date']).dt.isocalendar().week
+
+    heatmap_data = df_copy.groupby(['Week', 'Weekday'])['Revenue'].sum().reset_index()
+    heatmap_pivot = heatmap_data.pivot(index='Weekday', columns='Week', values='Revenue')
+
+    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    heatmap_pivot = heatmap_pivot.reindex(weekday_order)
+
+    fig = go.Figure(data=go.Heatmap(
+        z=heatmap_pivot.values,
+        x=heatmap_pivot.columns,
+        y=heatmap_pivot.index,
+        colorscale='YlOrRd'
+    ))
+    fig.update_layout(
+        title='Sales Heatmap',
+        height=350,
+        xaxis_title='Week',
+        yaxis_title='Day',
+        margin=dict(l=40, r=40, t=40, b=40),
+        paper_bgcolor='#f8f9fa'
+    )
+    return fig
+
+# Styles
+CARD_STYLE = {
+    'backgroundColor': 'white',
+    'padding': '20px',
+    'borderRadius': '10px',
+    'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+    'marginBottom': '20px'
+}
+
+METRIC_STYLE = {
+    'textAlign': 'center',
+    'padding': '25px',
+    'borderRadius': '10px',
+    'color': 'white',
+    'marginBottom': '15px'
+}
+
 # App layout
 app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    dcc.Interval(id='interval-component', interval=30*1000, n_intervals=0),
+
     # Header
-    html.H1("🏠 IoT Home Dashboard", style={'textAlign': 'center', 'color': '#2c3e50'}),
-    html.Hr(),
-
-    # Interval component for auto-refresh
-    dcc.Interval(id='interval-component', interval=5*1000, n_intervals=0),
-
-    # Main container
     html.Div([
-        # Left column
+        html.H1("Business Analytics Dashboard", style={'margin': '0', 'color': 'white'}),
+        html.P("Real-time insights and data visualization", style={'margin': '5px 0 0 0', 'color': '#e0e0e0'})
+    ], style={
+        'backgroundColor': '#1f77b4',
+        'padding': '30px',
+        'marginBottom': '30px',
+        'borderRadius': '0 0 15px 15px'
+    }),
+
+    # Navigation tabs
+    html.Div([
+        dcc.Tabs(id='tabs', value='dashboard', children=[
+            dcc.Tab(label='Dashboard', value='dashboard'),
+            dcc.Tab(label='Data Table', value='data-table'),
+            dcc.Tab(label='Analytics', value='analytics'),
+        ], style={'marginBottom': '20px'})
+    ], style={'maxWidth': '1400px', 'margin': '0 auto', 'padding': '0 20px'}),
+
+    # Main content
+    html.Div(id='page-content', style={'maxWidth': '1400px', 'margin': '0 auto', 'padding': '0 20px'}),
+
+], style={'fontFamily': 'Arial, sans-serif', 'backgroundColor': '#f5f5f5', 'minHeight': '100vh'})
+
+# Dashboard tab layout
+dashboard_layout = html.Div([
+    # Filters
+    html.Div([
         html.Div([
-            # Light Controls
-            html.H2("💡 Light Controls", style={'color': '#34495e'}),
-            html.Div([
-                html.Div([
-                    html.Label("Living Room", style={'fontWeight': 'bold'}),
-                    dcc.Checklist(
-                        id='lr-light',
-                        options=[{'label': ' Enable', 'value': 'on'}],
-                        value=[],
-                        style={'marginBottom': '10px'}
-                    ),
-                    html.Div(id='lr-status', style={'marginBottom': '20px'})
-                ], style={'display': 'inline-block', 'width': '30%', 'padding': '10px'}),
+            html.Label("Date Range (days)", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+            dcc.Slider(
+                id='date-range-slider',
+                min=7,
+                max=90,
+                step=1,
+                value=30,
+                marks={7: '7d', 30: '30d', 60: '60d', 90: '90d'},
+                tooltip={"placement": "bottom", "always_visible": False}
+            )
+        ], style={'width': '30%', 'display': 'inline-block', 'padding': '10px'}),
 
-                html.Div([
-                    html.Label("Bedroom", style={'fontWeight': 'bold'}),
-                    dcc.Checklist(
-                        id='br-light',
-                        options=[{'label': ' Enable', 'value': 'on'}],
-                        value=[],
-                        style={'marginBottom': '10px'}
-                    ),
-                    html.Div(id='br-status', style={'marginBottom': '20px'})
-                ], style={'display': 'inline-block', 'width': '30%', 'padding': '10px'}),
-
-                html.Div([
-                    html.Label("Kitchen", style={'fontWeight': 'bold'}),
-                    dcc.Checklist(
-                        id='kt-light',
-                        options=[{'label': ' Enable', 'value': 'on'}],
-                        value=[],
-                        style={'marginBottom': '10px'}
-                    ),
-                    html.Div(id='kt-status', style={'marginBottom': '20px'})
-                ], style={'display': 'inline-block', 'width': '30%', 'padding': '10px'}),
-            ]),
-
-            html.Hr(),
-
-            # Sensor Data
-            html.H2("📊 Sensor Data", style={'color': '#34495e'}),
-            html.Div([
-                html.Div([
-                    html.H3("🌡️ Temperature"),
-                    html.Div(id='temp-display', style={'fontSize': '24px', 'fontWeight': 'bold'})
-                ], style={'display': 'inline-block', 'width': '30%', 'padding': '10px',
-                         'backgroundColor': '#e8f4f8', 'borderRadius': '10px', 'margin': '5px'}),
-
-                html.Div([
-                    html.H3("💧 Humidity"),
-                    html.Div(id='humidity-display', style={'fontSize': '24px', 'fontWeight': 'bold'})
-                ], style={'display': 'inline-block', 'width': '30%', 'padding': '10px',
-                         'backgroundColor': '#e8f4f8', 'borderRadius': '10px', 'margin': '5px'}),
-
-                html.Div([
-                    html.H3("🚶 Motion"),
-                    html.Div(id='motion-display', style={'fontSize': '24px', 'fontWeight': 'bold'})
-                ], style={'display': 'inline-block', 'width': '30%', 'padding': '10px',
-                         'backgroundColor': '#e8f4f8', 'borderRadius': '10px', 'margin': '5px'}),
-            ], style={'marginBottom': '20px'}),
-
-            # Temperature Chart
-            dcc.Graph(id='temp-chart', figure=generate_temp_history()),
-
-        ], style={'width': '65%', 'display': 'inline-block', 'verticalAlign': 'top', 'padding': '20px'}),
-
-        # Right column
         html.Div([
-            # Camera Feed
-            html.H2("📹 Camera Feed", style={'color': '#34495e'}),
-            dcc.Checklist(
-                id='camera-toggle',
-                options=[{'label': ' Enable Camera', 'value': 'on'}],
-                value=['on'],
-                style={'marginBottom': '10px'}
-            ),
-            html.Div(id='camera-status', style={'marginBottom': '10px'}),
-            html.Div("📷 Mock Camera Feed",
-                style={'backgroundColor': '#1f77b4', 'color': 'white',
-                      'padding': '100px 20px', 'textAlign': 'center',
-                      'borderRadius': '10px', 'fontSize': '24px',
-                      'fontWeight': 'bold'}
-            ),
+            html.Label("Region", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+            dcc.Dropdown(
+                id='region-dropdown',
+                options=[{'label': r, 'value': r} for r in ['All', 'North America', 'Europe', 'Asia', 'South America']],
+                value='All',
+                clearable=False
+            )
+        ], style={'width': '30%', 'display': 'inline-block', 'padding': '10px'}),
 
-            html.Hr(),
+        html.Div([
+            html.Label("Products", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+            dcc.Dropdown(
+                id='product-dropdown',
+                options=[{'label': p, 'value': p} for p in ['Product A', 'Product B', 'Product C', 'Product D', 'Product E']],
+                value=['Product A', 'Product B', 'Product C', 'Product D', 'Product E'],
+                multi=True,
+                clearable=False
+            )
+        ], style={'width': '35%', 'display': 'inline-block', 'padding': '10px'}),
+    ], style=CARD_STYLE),
 
-            # System Status
-            html.H2("⚙️ System Status", style={'color': '#34495e'}),
-            html.Div("✅ All systems operational",
-                    style={'color': 'green', 'fontWeight': 'bold', 'marginBottom': '10px'}),
-            html.Div(id='last-update', style={'marginBottom': '10px'}),
+    # Metrics row
+    html.Div([
+        html.Div([
+            html.H4("Total Revenue", style={'margin': '0', 'fontSize': '16px'}),
+            html.H2(id='metric-revenue', style={'margin': '10px 0 0 0'})
+        ], style={**METRIC_STYLE, 'backgroundColor': '#1f77b4', 'width': '23%', 'display': 'inline-block', 'margin': '0 1%'}),
 
-            html.H3("Connected Devices", style={'fontSize': '18px'}),
-            html.Div(id='device-status'),
+        html.Div([
+            html.H4("Units Sold", style={'margin': '0', 'fontSize': '16px'}),
+            html.H2(id='metric-units', style={'margin': '10px 0 0 0'})
+        ], style={**METRIC_STYLE, 'backgroundColor': '#ff7f0e', 'width': '23%', 'display': 'inline-block', 'margin': '0 1%'}),
 
-        ], style={'width': '30%', 'display': 'inline-block', 'verticalAlign': 'top',
-                 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '10px'}),
+        html.Div([
+            html.H4("Avg Order Value", style={'margin': '0', 'fontSize': '16px'}),
+            html.H2(id='metric-avg', style={'margin': '10px 0 0 0'})
+        ], style={**METRIC_STYLE, 'backgroundColor': '#2ca02c', 'width': '23%', 'display': 'inline-block', 'margin': '0 1%'}),
 
-    ], style={'maxWidth': '1400px', 'margin': '0 auto'}),
+        html.Div([
+            html.H4("Transactions", style={'margin': '0', 'fontSize': '16px'}),
+            html.H2(id='metric-trans', style={'margin': '10px 0 0 0'})
+        ], style={**METRIC_STYLE, 'backgroundColor': '#d62728', 'width': '23%', 'display': 'inline-block', 'margin': '0 1%'}),
+    ], style={'marginBottom': '20px'}),
 
-], style={'fontFamily': 'Arial, sans-serif', 'padding': '20px'})
+    # Charts row 1
+    html.Div([
+        html.Div([
+            dcc.Graph(id='revenue-trend-chart')
+        ], style={**CARD_STYLE, 'width': '48%', 'display': 'inline-block', 'marginRight': '2%'}),
+
+        html.Div([
+            dcc.Graph(id='region-pie-chart')
+        ], style={**CARD_STYLE, 'width': '48%', 'display': 'inline-block'}),
+    ]),
+
+    # Charts row 2
+    html.Div([
+        html.Div([
+            dcc.Graph(id='product-bar-chart')
+        ], style={**CARD_STYLE, 'width': '48%', 'display': 'inline-block', 'marginRight': '2%'}),
+
+        html.Div([
+            dcc.Graph(id='heatmap-chart')
+        ], style={**CARD_STYLE, 'width': '48%', 'display': 'inline-block'}),
+    ]),
+])
+
+# Data table tab layout
+data_table_layout = html.Div([
+    html.Div([
+        html.H2("Sales Transaction Data", style={'marginBottom': '20px'}),
+
+        html.Div([
+            html.Label("Search", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+            dcc.Input(
+                id='table-search',
+                type='text',
+                placeholder='Search data...',
+                style={'width': '100%', 'padding': '10px', 'marginBottom': '15px', 'borderRadius': '5px', 'border': '1px solid #ddd'}
+            )
+        ]),
+
+        dash_table.DataTable(
+            id='sales-table',
+            columns=[],
+            data=[],
+            style_table={'overflowX': 'auto'},
+            style_cell={
+                'textAlign': 'left',
+                'padding': '12px',
+                'fontFamily': 'Arial, sans-serif',
+                'fontSize': '14px'
+            },
+            style_header={
+                'backgroundColor': '#1f77b4',
+                'color': 'white',
+                'fontWeight': 'bold',
+                'border': '1px solid #ddd'
+            },
+            style_data={
+                'border': '1px solid #ddd',
+                'backgroundColor': 'white'
+            },
+            style_data_conditional=[
+                {
+                    'if': {'row_index': 'odd'},
+                    'backgroundColor': '#f9f9f9'
+                }
+            ],
+            page_size=20,
+            sort_action='native',
+            filter_action='native'
+        )
+    ], style=CARD_STYLE)
+])
+
+# Analytics tab layout
+analytics_layout = html.Div([
+    html.Div([
+        html.H2("Advanced Analytics", style={'marginBottom': '20px'}),
+
+        html.Div([
+            html.Div([
+                html.H3("Key Performance Indicators", style={'color': '#1f77b4'}),
+                html.Ul([
+                    html.Li("Growth Rate: 12.5% MoM", style={'marginBottom': '10px'}),
+                    html.Li("Customer Retention: 87%", style={'marginBottom': '10px'}),
+                    html.Li("Average Deal Size: $3,245", style={'marginBottom': '10px'}),
+                    html.Li("Conversion Rate: 24.3%", style={'marginBottom': '10px'}),
+                ], style={'fontSize': '16px'}),
+
+                html.H3("Top Performing Regions", style={'color': '#1f77b4', 'marginTop': '30px'}),
+                html.Ol([
+                    html.Li("North America - $2.4M", style={'marginBottom': '10px'}),
+                    html.Li("Europe - $1.8M", style={'marginBottom': '10px'}),
+                    html.Li("Asia - $1.5M", style={'marginBottom': '10px'}),
+                    html.Li("South America - $0.9M", style={'marginBottom': '10px'}),
+                ], style={'fontSize': '16px'}),
+            ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top', 'padding': '20px'}),
+
+            html.Div([
+                html.H3("Strategic Recommendations", style={'color': '#1f77b4'}),
+
+                html.H4("Inventory Management", style={'marginTop': '20px', 'color': '#2ca02c'}),
+                html.Ul([
+                    html.Li("Increase stock for Product A by 20%"),
+                    html.Li("Monitor Product E performance closely"),
+                ], style={'marginBottom': '20px'}),
+
+                html.H4("Marketing", style={'color': '#2ca02c'}),
+                html.Ul([
+                    html.Li("Focus campaigns on Asia-Pacific region"),
+                    html.Li("Launch seasonal promotions in Q2"),
+                    html.Li("Increase digital advertising spend by 15%"),
+                ], style={'marginBottom': '20px'}),
+
+                html.H4("Sales", style={'color': '#2ca02c'}),
+                html.Ul([
+                    html.Li("Prioritize high-value customer segments"),
+                    html.Li("Improve conversion rates in South America"),
+                    html.Li("Expand enterprise sales team"),
+                ]),
+            ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top', 'padding': '20px', 'backgroundColor': '#f9f9f9', 'borderRadius': '10px'}),
+        ]),
+    ], style=CARD_STYLE)
+])
 
 
 # Callbacks
 @app.callback(
-    Output('lr-status', 'children'),
-    Input('lr-light', 'value')
+    Output('page-content', 'children'),
+    Input('tabs', 'value')
 )
-def update_lr_status(value):
-    if 'on' in value:
-        return html.Span("ON", style={'color': 'green', 'fontWeight': 'bold'})
-    return html.Span("OFF", style={'color': 'red', 'fontWeight': 'bold'})
-
+def render_content(tab):
+    if tab == 'dashboard':
+        return dashboard_layout
+    elif tab == 'data-table':
+        return data_table_layout
+    elif tab == 'analytics':
+        return analytics_layout
 
 @app.callback(
-    Output('br-status', 'children'),
-    Input('br-light', 'value')
+    [Output('metric-revenue', 'children'),
+     Output('metric-units', 'children'),
+     Output('metric-avg', 'children'),
+     Output('metric-trans', 'children'),
+     Output('revenue-trend-chart', 'figure'),
+     Output('region-pie-chart', 'figure'),
+     Output('product-bar-chart', 'figure'),
+     Output('heatmap-chart', 'figure')],
+    [Input('date-range-slider', 'value'),
+     Input('region-dropdown', 'value'),
+     Input('product-dropdown', 'value'),
+     Input('interval-component', 'n_intervals')]
 )
-def update_br_status(value):
-    if 'on' in value:
-        return html.Span("ON", style={'color': 'green', 'fontWeight': 'bold'})
-    return html.Span("OFF", style={'color': 'red', 'fontWeight': 'bold'})
+def update_dashboard(date_range, region, products, n):
+    df = generate_sales_data()
 
+    # Filter by date
+    cutoff_date = datetime.now() - timedelta(days=date_range)
+    df_filtered = df[df['Date'] >= cutoff_date].copy()
+
+    # Filter by region
+    if region != 'All':
+        df_filtered = df_filtered[df_filtered['Region'] == region]
+
+    # Filter by products
+    if products:
+        df_filtered = df_filtered[df_filtered['Product'].isin(products)]
+
+    # Calculate metrics
+    total_revenue = df_filtered['Revenue'].sum()
+    total_units = df_filtered['Units'].sum()
+    avg_order = total_revenue / len(df_filtered) if len(df_filtered) > 0 else 0
+    total_trans = len(df_filtered)
+
+    # Format metrics
+    revenue_str = f"${total_revenue:,.0f}"
+    units_str = f"{total_units:,}"
+    avg_str = f"${avg_order:.0f}"
+    trans_str = f"{total_trans:,}"
+
+    # Generate charts
+    trend_chart = create_revenue_trend(df_filtered)
+    pie_chart = create_region_pie(df_filtered)
+    bar_chart = create_product_chart(df_filtered)
+    heatmap = create_heatmap(df_filtered)
+
+    return revenue_str, units_str, avg_str, trans_str, trend_chart, pie_chart, bar_chart, heatmap
 
 @app.callback(
-    Output('kt-status', 'children'),
-    Input('kt-light', 'value')
+    [Output('sales-table', 'data'),
+     Output('sales-table', 'columns')],
+    [Input('date-range-slider', 'value'),
+     Input('region-dropdown', 'value'),
+     Input('product-dropdown', 'value'),
+     Input('table-search', 'value')]
 )
-def update_kt_status(value):
-    if 'on' in value:
-        return html.Span("ON", style={'color': 'green', 'fontWeight': 'bold'})
-    return html.Span("OFF", style={'color': 'red', 'fontWeight': 'bold'})
+def update_table(date_range, region, products, search_value):
+    df = generate_sales_data()
 
+    # Filter by date
+    cutoff_date = datetime.now() - timedelta(days=date_range)
+    df_filtered = df[df['Date'] >= cutoff_date].copy()
 
-@app.callback(
-    Output('camera-status', 'children'),
-    Input('camera-toggle', 'value')
-)
-def update_camera_status(value):
-    if 'on' in value:
-        return html.Span("📷 Camera Active", style={'color': 'green', 'fontWeight': 'bold'})
-    return html.Span("📷 Camera Disabled", style={'color': 'red', 'fontWeight': 'bold'})
+    # Filter by region
+    if region != 'All':
+        df_filtered = df_filtered[df_filtered['Region'] == region]
 
+    # Filter by products
+    if products:
+        df_filtered = df_filtered[df_filtered['Product'].isin(products)]
 
-@app.callback(
-    [Output('temp-display', 'children'),
-     Output('humidity-display', 'children'),
-     Output('motion-display', 'children'),
-     Output('temp-chart', 'figure'),
-     Output('last-update', 'children'),
-     Output('device-status', 'children')],
-    [Input('interval-component', 'n_intervals'),
-     Input('lr-light', 'value'),
-     Input('br-light', 'value'),
-     Input('kt-light', 'value'),
-     Input('camera-toggle', 'value')]
-)
-def update_sensors(n, lr_light, br_light, kt_light, camera):
-    # Generate mock sensor data
-    temp = 20 + np.random.uniform(-2, 2)
-    humidity = 45 + np.random.uniform(-5, 5)
-    motion = "Detected" if np.random.random() < 0.2 else "Clear"
+    # Format date and revenue
+    df_filtered['Date'] = pd.to_datetime(df_filtered['Date']).dt.strftime('%Y-%m-%d')
+    df_filtered['Revenue'] = df_filtered['Revenue'].apply(lambda x: f"${x:,.2f}")
 
-    # Update chart
-    chart = generate_temp_history()
+    # Search filter
+    if search_value:
+        df_filtered = df_filtered[
+            df_filtered.astype(str).apply(lambda x: x.str.contains(search_value, case=False, na=False)).any(axis=1)
+        ]
 
-    # Last update time
-    last_update = f"🕐 Last update: {datetime.now().strftime('%H:%M:%S')}"
+    columns = [{"name": i, "id": i} for i in df_filtered.columns]
+    data = df_filtered.to_dict('records')
 
-    # Device status
-    devices = [
-        ("Living Room Light", 'on' in lr_light),
-        ("Bedroom Light", 'on' in br_light),
-        ("Kitchen Light", 'on' in kt_light),
-        ("Camera", 'on' in camera),
-        ("Temperature Sensor", True),
-        ("Motion Detector", True),
-    ]
-
-    device_status = html.Div([
-        html.Div(f"{'🟢' if status else '🔴'} {name}",
-                style={'marginBottom': '5px'})
-        for name, status in devices
-    ])
-
-    return f"{temp:.1f}°C", f"{humidity:.1f}%", motion, chart, last_update, device_status
+    return data, columns
 
 
 if __name__ == '__main__':
-    print("Starting Dash IoT Dashboard on http://localhost:8050")
+    print("Starting Dash Analytics Dashboard on http://localhost:8050")
     app.run(debug=True, host='0.0.0.0', port=8050)

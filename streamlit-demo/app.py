@@ -1,145 +1,323 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import datetime
-import time
+from datetime import datetime, timedelta
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Page config
-st.set_page_config(page_title="IoT Dashboard - Streamlit", layout="wide")
+st.set_page_config(
+    page_title="Analytics Dashboard - Streamlit",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Initialize session state for switches
-if 'living_room_light' not in st.session_state:
-    st.session_state.living_room_light = False
-if 'bedroom_light' not in st.session_state:
-    st.session_state.bedroom_light = False
-if 'kitchen_light' not in st.session_state:
-    st.session_state.kitchen_light = False
-if 'camera_enabled' not in st.session_state:
-    st.session_state.camera_enabled = True
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #1f77b4;
+    }
+    .stMetric {
+        background-color: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+</style>
+""", unsafe_allow_html=True)
 
-st.title("🏠 IoT Home Dashboard")
-st.markdown("---")
+# Initialize session state
+if 'selected_region' not in st.session_state:
+    st.session_state.selected_region = 'All'
+if 'date_range' not in st.session_state:
+    st.session_state.date_range = 30
 
-# Main layout
-col1, col2 = st.columns([2, 1])
+# Generate realistic sales data
+@st.cache_data
+def generate_sales_data(days=90):
+    np.random.seed(42)
+    dates = pd.date_range(end=datetime.now(), periods=days, freq='D')
+    regions = ['North America', 'Europe', 'Asia', 'South America']
+    products = ['Product A', 'Product B', 'Product C', 'Product D', 'Product E']
 
-with col1:
-    st.header("💡 Light Controls")
+    data = []
+    for date in dates:
+        for region in regions:
+            for product in products:
+                revenue = np.random.uniform(1000, 5000) * (1 + 0.1 * np.sin(date.dayofyear / 365 * 2 * np.pi))
+                units = int(np.random.uniform(10, 100))
+                data.append({
+                    'Date': date,
+                    'Region': region,
+                    'Product': product,
+                    'Revenue': revenue,
+                    'Units': units,
+                    'Customer_Count': int(np.random.uniform(5, 50))
+                })
 
-    # Light switches in a grid
-    switch_col1, switch_col2, switch_col3 = st.columns(3)
+    return pd.DataFrame(data)
 
-    with switch_col1:
-        st.session_state.living_room_light = st.toggle(
-            "Living Room",
-            value=st.session_state.living_room_light,
-            key="lr_light"
-        )
-        if st.session_state.living_room_light:
-            st.success("ON")
-        else:
-            st.error("OFF")
+# Generate customer data
+@st.cache_data
+def generate_customer_data(n=100):
+    np.random.seed(42)
+    return pd.DataFrame({
+        'Customer_ID': [f'CUST{i:04d}' for i in range(1, n+1)],
+        'Name': [f'Customer {i}' for i in range(1, n+1)],
+        'Total_Purchases': np.random.randint(1, 50, n),
+        'Lifetime_Value': np.random.uniform(500, 50000, n),
+        'Region': np.random.choice(['North America', 'Europe', 'Asia', 'South America'], n),
+        'Status': np.random.choice(['Active', 'Inactive', 'VIP'], n, p=[0.6, 0.3, 0.1])
+    })
 
-    with switch_col2:
-        st.session_state.bedroom_light = st.toggle(
-            "Bedroom",
-            value=st.session_state.bedroom_light,
-            key="br_light"
-        )
-        if st.session_state.bedroom_light:
-            st.success("ON")
-        else:
-            st.error("OFF")
+df_sales = generate_sales_data()
+df_customers = generate_customer_data()
 
-    with switch_col3:
-        st.session_state.kitchen_light = st.toggle(
-            "Kitchen",
-            value=st.session_state.kitchen_light,
-            key="kt_light"
-        )
-        if st.session_state.kitchen_light:
-            st.success("ON")
-        else:
-            st.error("OFF")
+# Sidebar
+with st.sidebar:
+    st.title("Dashboard Controls")
 
-    st.markdown("---")
-
-    # Sensor data
-    st.header("📊 Sensor Data")
-
-    # Generate mock sensor data
-    current_temp = 20 + np.random.uniform(-2, 2)
-    current_humidity = 45 + np.random.uniform(-5, 5)
-    current_motion = np.random.choice([True, False], p=[0.2, 0.8])
-
-    metric_col1, metric_col2, metric_col3 = st.columns(3)
-
-    with metric_col1:
-        st.metric("🌡️ Temperature", f"{current_temp:.1f}°C", f"{np.random.uniform(-1, 1):.1f}°C")
-
-    with metric_col2:
-        st.metric("💧 Humidity", f"{current_humidity:.1f}%", f"{np.random.uniform(-2, 2):.1f}%")
-
-    with metric_col3:
-        motion_status = "Detected" if current_motion else "Clear"
-        st.metric("🚶 Motion", motion_status)
-
-    # Historical data chart
-    st.subheader("Temperature History")
-
-    # Generate mock historical data
-    times = pd.date_range(end=datetime.now(), periods=50, freq='1min')
-    temps = 20 + np.cumsum(np.random.randn(50) * 0.5)
-
-    chart_data = pd.DataFrame({
-        'time': times,
-        'temperature': temps
-    }).set_index('time')
-
-    st.line_chart(chart_data)
-
-with col2:
-    st.header("📹 Camera Feed")
-
-    st.session_state.camera_enabled = st.toggle(
-        "Enable Camera",
-        value=st.session_state.camera_enabled,
-        key="cam_toggle"
+    # Date range filter
+    date_range = st.slider(
+        "Date Range (days)",
+        min_value=7,
+        max_value=90,
+        value=30,
+        key='date_filter'
     )
 
-    if st.session_state.camera_enabled:
-        # Mock camera feed (in real scenario, you'd stream actual camera)
-        st.info("📷 Camera Active")
-        st.image("camera_placeholder.png",
-                 caption="Front Door Camera")
-    else:
-        st.warning("📷 Camera Disabled")
+    # Region filter
+    selected_region = st.selectbox(
+        "Region",
+        options=['All'] + list(df_sales['Region'].unique()),
+        key='region_filter'
+    )
+
+    # Product filter
+    selected_products = st.multiselect(
+        "Products",
+        options=df_sales['Product'].unique(),
+        default=list(df_sales['Product'].unique())
+    )
 
     st.markdown("---")
 
-    st.header("⚙️ System Status")
-    st.success("✅ All systems operational")
-    st.info(f"🕐 Last update: {datetime.now().strftime('%H:%M:%S')}")
+    # Export options
+    st.subheader("Export Data")
+    if st.button("Download CSV"):
+        csv = df_sales.to_csv(index=False)
+        st.download_button(
+            label="Download Sales Data",
+            data=csv,
+            file_name=f"sales_data_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
 
-    # Device status
-    st.subheader("Connected Devices")
-    devices = [
-        ("Living Room Light", st.session_state.living_room_light),
-        ("Bedroom Light", st.session_state.bedroom_light),
-        ("Kitchen Light", st.session_state.kitchen_light),
-        ("Camera", st.session_state.camera_enabled),
-        ("Temperature Sensor", True),
-        ("Motion Detector", True),
+# Filter data based on selections
+df_filtered = df_sales[df_sales['Date'] >= (datetime.now() - timedelta(days=date_range))]
+if selected_region != 'All':
+    df_filtered = df_filtered[df_filtered['Region'] == selected_region]
+if selected_products:
+    df_filtered = df_filtered[df_filtered['Product'].isin(selected_products)]
+
+# Main dashboard
+st.title("Business Analytics Dashboard")
+st.markdown("Real-time insights into sales performance and customer metrics")
+
+# Top metrics
+col1, col2, col3, col4 = st.columns(4)
+
+total_revenue = df_filtered['Revenue'].sum()
+total_units = df_filtered['Units'].sum()
+avg_order_value = total_revenue / len(df_filtered) if len(df_filtered) > 0 else 0
+customer_count = df_filtered['Customer_Count'].sum()
+
+with col1:
+    st.metric(
+        "Total Revenue",
+        f"${total_revenue:,.0f}",
+        f"{np.random.uniform(-5, 15):.1f}%"
+    )
+
+with col2:
+    st.metric(
+        "Units Sold",
+        f"{total_units:,}",
+        f"{np.random.uniform(-3, 12):.1f}%"
+    )
+
+with col3:
+    st.metric(
+        "Avg Order Value",
+        f"${avg_order_value:.0f}",
+        f"{np.random.uniform(-2, 8):.1f}%"
+    )
+
+with col4:
+    st.metric(
+        "Total Customers",
+        f"{customer_count:,}",
+        f"{np.random.uniform(1, 20):.1f}%"
+    )
+
+st.markdown("---")
+
+# Charts row 1
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Revenue Trend")
+    revenue_by_date = df_filtered.groupby('Date')['Revenue'].sum().reset_index()
+    fig_trend = px.line(
+        revenue_by_date,
+        x='Date',
+        y='Revenue',
+        title='Daily Revenue Trend'
+    )
+    fig_trend.update_layout(height=350)
+    st.plotly_chart(fig_trend, use_container_width=True)
+
+with col2:
+    st.subheader("Revenue by Region")
+    revenue_by_region = df_filtered.groupby('Region')['Revenue'].sum().reset_index()
+    fig_region = px.pie(
+        revenue_by_region,
+        values='Revenue',
+        names='Region',
+        title='Revenue Distribution by Region'
+    )
+    fig_region.update_layout(height=350)
+    st.plotly_chart(fig_region, use_container_width=True)
+
+# Charts row 2
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Product Performance")
+    product_perf = df_filtered.groupby('Product').agg({
+        'Revenue': 'sum',
+        'Units': 'sum'
+    }).reset_index()
+
+    fig_products = px.bar(
+        product_perf,
+        x='Product',
+        y='Revenue',
+        title='Revenue by Product',
+        color='Units',
+        color_continuous_scale='Blues'
+    )
+    fig_products.update_layout(height=350)
+    st.plotly_chart(fig_products, use_container_width=True)
+
+with col2:
+    st.subheader("Sales Heatmap")
+    df_filtered['Weekday'] = df_filtered['Date'].dt.day_name()
+    df_filtered['Week'] = df_filtered['Date'].dt.isocalendar().week
+
+    heatmap_data = df_filtered.groupby(['Week', 'Weekday'])['Revenue'].sum().reset_index()
+    heatmap_pivot = heatmap_data.pivot(index='Weekday', columns='Week', values='Revenue')
+
+    # Reorder weekdays
+    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    heatmap_pivot = heatmap_pivot.reindex(weekday_order)
+
+    fig_heatmap = go.Figure(data=go.Heatmap(
+        z=heatmap_pivot.values,
+        x=heatmap_pivot.columns,
+        y=heatmap_pivot.index,
+        colorscale='YlOrRd'
+    ))
+    fig_heatmap.update_layout(
+        title='Revenue Heatmap by Week and Day',
+        height=350,
+        xaxis_title='Week Number',
+        yaxis_title='Day of Week'
+    )
+    st.plotly_chart(fig_heatmap, use_container_width=True)
+
+st.markdown("---")
+
+# Data tables section
+tab1, tab2 = st.tabs(["Sales Data", "Customer Data"])
+
+with tab1:
+    st.subheader("Recent Sales Transactions")
+
+    # Add search
+    search_term = st.text_input("Search sales data", "")
+
+    display_df = df_filtered.copy()
+    if search_term:
+        display_df = display_df[
+            display_df.apply(lambda row: search_term.lower() in str(row.values).lower(), axis=1)
+        ]
+
+    # Format for display
+    display_df['Revenue'] = display_df['Revenue'].apply(lambda x: f"${x:,.2f}")
+    display_df['Date'] = display_df['Date'].dt.strftime('%Y-%m-%d')
+
+    st.dataframe(
+        display_df[['Date', 'Region', 'Product', 'Revenue', 'Units', 'Customer_Count']].tail(100),
+        use_container_width=True,
+        height=400
+    )
+
+with tab2:
+    st.subheader("Customer Database")
+
+    # Customer filters
+    col1, col2 = st.columns(2)
+    with col1:
+        status_filter = st.multiselect(
+            "Status",
+            options=df_customers['Status'].unique(),
+            default=list(df_customers['Status'].unique())
+        )
+    with col2:
+        region_filter_cust = st.multiselect(
+            "Region",
+            options=df_customers['Region'].unique(),
+            default=list(df_customers['Region'].unique())
+        )
+
+    filtered_customers = df_customers[
+        (df_customers['Status'].isin(status_filter)) &
+        (df_customers['Region'].isin(region_filter_cust))
     ]
 
-    for device, status in devices:
-        st.text(f"{'🟢' if status else '🔴'} {device}")
+    # Format for display
+    display_customers = filtered_customers.copy()
+    display_customers['Lifetime_Value'] = display_customers['Lifetime_Value'].apply(lambda x: f"${x:,.2f}")
 
-# Auto-refresh
+    st.dataframe(
+        display_customers,
+        use_container_width=True,
+        height=400
+    )
+
+    # Customer stats
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Customers", len(filtered_customers))
+    with col2:
+        avg_ltv = filtered_customers['Lifetime_Value'].str.replace('$', '').str.replace(',', '').astype(float).mean()
+        st.metric("Avg Lifetime Value", f"${avg_ltv:,.0f}")
+    with col3:
+        vip_count = len(filtered_customers[filtered_customers['Status'] == 'VIP'])
+        st.metric("VIP Customers", vip_count)
+
+# Footer
 st.markdown("---")
-if st.button("🔄 Refresh Data"):
-    st.rerun()
-
-# Auto-refresh every 5 seconds
-st.markdown("*Auto-refreshing every 5 seconds...*")
-time.sleep(0.1)  # Small delay to prevent too fast updates
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+with col2:
+    if st.button("Refresh Dashboard"):
+        st.rerun()
+with col3:
+    st.caption(f"Showing data for last {date_range} days")
