@@ -19,7 +19,7 @@ def test_light_status():
     print("=" * 60)
     print()
 
-    client = ParkingLotMQTT()
+    client = ParkingLotMQTT(client_id="parking_lot_test")
 
     print(f"Broker: {client.broker}:{client.port}")
     print("Connecting...")

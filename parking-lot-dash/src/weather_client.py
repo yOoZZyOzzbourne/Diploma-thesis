@@ -4,6 +4,7 @@ Connects to GIOM 3000 weather station via Telnet
 """
 import socket
 import time
+import threading
 from threading import Lock
 
 
@@ -159,5 +160,13 @@ class WeatherStationClient:
         return data
 
     def get_last_data(self):
-        """Get last received data"""
         return self.last_data
+
+    def start_background_polling(self, interval: int = 60):
+        """Poll the weather station in a daemon thread; never blocks Dash callbacks."""
+        def _loop():
+            while True:
+                self.connect_and_read()
+                time.sleep(interval)
+        t = threading.Thread(target=_loop, daemon=True)
+        t.start()

@@ -1,0 +1,296 @@
+:root {
+  --primary:         #004D40;
+  --primary-600:     #00332B;
+  --primary-300:     #2A7D72;
+  --accent:          #00C853;
+  --accent-700:      #00A63F;
+  --bg:              #0B1214;
+  --surface:         #102022;
+  --surface-variant: #0E1A1C;
+  --text-primary:    #E6F7EF;
+  --text-secondary:  #8AA39A;
+  --info:            #00E5FF;
+  --success:         #00C853;
+  --danger:          #E74C3C;
+  --border:          #183233;
+  --glow-cyan:       rgba(0,229,255,0.08);
+  --glow-green:      rgba(0,200,83,0.18);
+  --sidebar-w:       220px;
+  --panel-w:         280px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--surface-variant); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--primary-300); }
+
+/* ── Layout shell ── */
+#app-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Sidebar ── */
+#sidebar-container {
+  transition: width 0.22s ease;
+  flex-shrink: 0;
+}
+
+#sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--primary-600);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  z-index: 100;
+  position: relative;
+}
+
+/* Collapse toggle — right-edge tab, mirrors the camera panel toggle */
+#sidebar-toggle-btn {
+  position: absolute;
+  top: 50%;
+  right: -18px;
+  transform: translateY(-50%);
+  background: var(--primary-600);
+  border: 1px solid var(--border);
+  border-left: none;
+  color: var(--text-secondary);
+  width: 18px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 0 6px 6px 0;
+  z-index: 200;
+  font-size: 10px;
+  user-select: none;
+}
+#sidebar-toggle-btn:hover { color: var(--accent); background: var(--primary); }
+
+/* When sidebar-container is collapsed, hide text labels */
+#sidebar-container[style*="width: 64px"] .nav-text { display: none; }
+#sidebar-container[style*="width: 64px"] .nav-link-item { justify-content: center; padding: 11px 0; }
+#sidebar-container[style*="width: 64px"] #sidebar { width: 64px; min-width: 64px; }
+
+.nav-link-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 20px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 8px;
+  margin: 2px 10px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+.nav-link-item:hover { background: rgba(0,200,83,0.08); color: var(--text-primary); }
+.nav-link-item.active {
+  background: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+.nav-link-item.active i { color: #000; }
+
+/* ── Main content ── */
+#main-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg);
+  padding: 28px 32px;
+}
+
+/* ── Camera panel (right column) ── */
+#camera-panel-container { display: flex; }
+
+#camera-panel {
+  display: flex;
+  flex-direction: row;
+  width: var(--panel-w);
+  height: 100vh;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.25s ease;
+}
+#camera-panel.panel-closed { width: 36px; }
+
+/* Spine — always-visible 36px strip, click to toggle */
+#panel-toggle-btn {
+  width: 36px;
+  min-width: 36px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-right: 1px solid var(--border);
+  user-select: none;
+  background: var(--surface-variant);
+  transition: color 0.15s, background 0.15s;
+}
+#panel-toggle-btn:hover { color: var(--accent); background: var(--primary-600); }
+
+/* Content area next to the spine */
+#camera-panel-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ── Cards ── */
+.park-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.park-card.offline { border-color: var(--danger); }
+.park-card.pinned  { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* ── Stat card ── */
+.stat-value { font-size: 32px; font-weight: 700; color: var(--text-primary); line-height: 1; }
+.stat-label { font-size: 11px; letter-spacing: 0.08em; color: var(--text-secondary); text-transform: uppercase; margin-top: 4px; }
+.stat-sub   { font-size: 12px; color: var(--accent); margin-top: 2px; }
+
+/* ── Status badge ── */
+.badge-online  { background: rgba(0,200,83,0.15);  color: var(--success); border: 1px solid rgba(0,200,83,0.3);  font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+.badge-offline { background: rgba(231,76,60,0.15); color: var(--danger);  border: 1px solid rgba(231,76,60,0.3); font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+.badge-info    { background: rgba(0,229,255,0.10); color: var(--info);    border: 1px solid rgba(0,229,255,0.25); font-size: 11px; padding: 2px 8px; border-radius: 20px; }
+
+/* ── Light slider override ── */
+.slider-container input[type=range] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+  height: 4px;
+}
+
+/* ── Pole map ── */
+.pole-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: transparent;
+  border: 2px solid var(--accent);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  user-select: none;
+}
+.pole-circle:hover { background: rgba(0,200,83,0.15); transform: scale(1.08); }
+.pole-circle.offline { border-color: var(--danger); color: var(--danger); }
+
+/* ── Event log ── */
+.event-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.event-row:last-child { border-bottom: none; }
+.event-time { color: var(--text-secondary); font-size: 12px; min-width: 130px; font-variant-numeric: tabular-nums; }
+
+/* ── Quick action buttons ── */
+.action-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-variant);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.action-btn:hover { background: var(--surface); border-color: var(--primary-300); }
+.action-btn.accent { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 700; }
+.action-btn.accent:hover { background: var(--accent-700); }
+.action-btn.danger { border-color: var(--danger); color: var(--danger); }
+.action-btn.danger:hover { background: rgba(231,76,60,0.1); }
+.action-btn:disabled, .action-btn[disabled] { opacity: 0.38; cursor: not-allowed; pointer-events: none; }
+
+/* ── Screen title ── */
+.screen-title { font-size: 26px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 10px; }
+.screen-subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+/* ── Camera card thumbnail ── */
+.cam-thumb {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #000;
+  display: block;
+}
+.cam-thumb-placeholder {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: var(--surface-variant);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 32px;
+}
+
+/* ── Login modal ── */
+.login-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+}
+.login-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  width: 340px;
+}
+.login-input {
+  width: 100%;
+  background: var(--surface-variant);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-size: 14px;
+  margin-bottom: 12px;
+  outline: none;
+}
+.login-input:focus { border-color: var(--accent); }

@@ -17,12 +17,12 @@ logger = logging.getLogger(__name__)
 class ParkingLotMQTT:
     """MQTT client for parking lot control and monitoring"""
 
-    def __init__(self):
+    def __init__(self, client_id="parking_lot_dash"):
         self.broker = os.getenv('MQTT_BROKER', '158.196.15.41')
         self.port = int(os.getenv('MQTT_PORT', 1883))
         self.keepalive = int(os.getenv('MQTT_KEEPALIVE', 60))
 
-        self.client = mqtt.Client(client_id="parking_lot_dash")
+        self.client = mqtt.Client(client_id=client_id)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self.client.on_disconnect = self._on_disconnect
@@ -30,12 +30,25 @@ class ParkingLotMQTT:
         self.connected = False
         self.message_callbacks: Dict[str, Callable] = {}
         self.device_states: Dict[str, Any] = {}
+        self.event_log: list = []
+
+    def _log(self, level: str, message: str):
+        """Append an event to the in-memory event log (capped at 200 entries)."""
+        from datetime import datetime
+        self.event_log.append({
+            "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "level": level,
+            "message": message,
+        })
+        if len(self.event_log) > 200:
+            self.event_log = self.event_log[-200:]
 
     def _on_connect(self, client, userdata, flags, rc):
         """Callback when connected to MQTT broker"""
         if rc == 0:
             logger.info(f"Connected to MQTT broker at {self.broker}:{self.port}")
             self.connected = True
+            self._log("success", f"Broker připojen ({self.broker}:{self.port})")
             # Subscribe to all light power topics
             client.subscribe("lights/device/+/segment/+/power")
             # Subscribe to telemetry
@@ -50,12 +63,15 @@ class ParkingLotMQTT:
                 4: "Connection refused - bad username or password",
                 5: "Connection refused - not authorised"
             }
-            logger.error(f"Connection failed: {error_messages.get(rc, f'Unknown error {rc}')}")
+            msg = error_messages.get(rc, f"Unknown error {rc}")
+            logger.error(f"Connection failed: {msg}")
+            self._log("error", f"Chyba připojení: {msg}")
             self.connected = False
 
     def _on_disconnect(self, client, userdata, rc):
         """Callback when disconnected from MQTT broker"""
         logger.warning(f"Disconnected from MQTT broker (rc={rc})")
+        self._log("warning", "Broker odpojen")
         self.connected = False
 
     def _on_message(self, client, userdata, msg):
@@ -73,6 +89,10 @@ class ParkingLotMQTT:
 
             # Store in device states
             self.device_states[topic] = payload
+
+            # Log power state updates (not every telemetry message to avoid noise)
+            if "/power" in topic and not topic.endswith("/get"):
+                self._log("info", f"{topic.split('/')[-1].upper()} → {payload}")
 
             # Call registered callbacks
             for pattern, callback in self.message_callbacks.items():
@@ -142,6 +162,7 @@ class ParkingLotMQTT:
     def set_light_power(self, mac: str, segment: int, power: float):
         """Set light power (0-100%)"""
         topic = f"lights/device/{mac}/segment/{segment}/power/set"
+        self._log("info", f"Světlo {mac[-6:]} seg{segment} → {power}%")
         self.publish(topic, str(power))
 
     def get_light_power(self, mac: str, segment: int):
@@ -153,6 +174,7 @@ class ParkingLotMQTT:
         """Turn beacon on/off"""
         power = 100.0 if state else 0.0
         topic = f"lights/device/{mac}/segment/0/power/set"
+        self._log("info", f"Maják {mac[-6:]} → {'ZAP' if state else 'VYP'}")
         self.publish(topic, str(power))
 
     def discover_lights(self):
